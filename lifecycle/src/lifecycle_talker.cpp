@@ -20,289 +20,215 @@
 #include <utility>
 
 #include "lifecycle_msgs/msg/transition.hpp"
-
-#include "rclcpp/rclcpp.hpp"
 #include "rclcpp/publisher.hpp"
-
+#include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "rclcpp_lifecycle/lifecycle_publisher.hpp"
-
 #include "rcutils/logging_macros.h"
-
 #include "std_msgs/msg/string.hpp"
 
 using namespace std::chrono_literals;
 
-/// LifecycleTalker inheriting from rclcpp_lifecycle::LifecycleNode
+/// LifecycleTalker 继承自 rclcpp_lifecycle::LifecycleNode
 /**
- * The lifecycle talker does not like the regular "talker" node
- * inherit from node, but rather from lifecyclenode. This brings
- * in a set of callbacks which are getting invoked depending on
- * the current state of the node.
- * Every lifecycle node has a set of services attached to it
- * which make it controllable from the outside and invoke state
- * changes.
- * Available Services as for Beta1:
- * - <node_name>__get_state
- * - <node_name>__change_state
- * - <node_name>__get_available_states
- * - <node_name>__get_available_transitions
- * Additionally, a publisher for state change notifications is
- * created:
- * - <node_name>__transition_event
+ * LifecycleTalker 不像常规的 "talker" 节点继承自 node，而是继承自 lifecyclenode。
+ * 这带来了一组回调函数，这些回调函数根据节点的当前状态被调用。
+ * (每个生命周期节点默认有 5 种不同的通信接口)
+ * 每个生命周期节点都有一组附加到它上面的服务，这使得它可以从外部进行控制并调用状态更改。
+ * Beta1 中可用的服务：
+ *   - <node_name>__get_state
+ *   - <node_name>__change_state
+ *   - <node_name>__get_available_states
+ *   - <node_name>__get_available_transitions
+ * 另外，还创建了一个用于状态更改通知的发布者：
+ *   - <node_name>__transition_event
  */
-class LifecycleTalker : public rclcpp_lifecycle::LifecycleNode
-{
+class LifecycleTalker : public rclcpp_lifecycle::LifecycleNode {
 public:
-  /// LifecycleTalker constructor
+  /// LifecycleTalker 构造函数
   /**
-   * The lifecycletalker/lifecyclenode constructor has the same
-   * arguments a regular node.
+   * lifecycletalker/lifecyclenode 构造函数与常规节点具有相同的参数。
    */
-  explicit LifecycleTalker(const std::string & node_name, bool intra_process_comms = false)
-  : rclcpp_lifecycle::LifecycleNode(node_name,
-      rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms))
-  {}
+  explicit LifecycleTalker(
+      const std::string &node_name,  //
+      bool intra_process_comms = false)
+      : rclcpp_lifecycle::LifecycleNode(
+            node_name,  //
+            rclcpp::NodeOptions().use_intra_process_comms(intra_process_comms)) {}
 
-  /// Callback for walltimer in order to publish the message.
+  /// walltimer 的回调函数，用于发布消息。
   /**
-   * Callback for walltimer. This function gets invoked by the timer
-   * and executes the publishing.
-   * For this demo, we ask the node for its current state. If the
-   * lifecycle publisher is not activate, we still invoke publish, but
-   * the communication is blocked so that no messages is actually transferred.
+   * walltimer 的回调函数。此函数由计时器调用并执行发布操作。
+   * 对于此演示，要求节点提供其当前状态。
+   * 如果生命周期发布者未激活，仍然调用 publish，但通信被阻塞，因此实际上不传输任何消息。
    */
-  void
-  publish()
-  {
+  void publish() {
     static size_t count = 0;
     auto msg = std::make_unique<std_msgs::msg::String>();
     msg->data = "Lifecycle HelloWorld #" + std::to_string(++count);
 
-    // Print the current state for demo purposes
+    // 为演示目的打印当前状态
     if (!pub_->is_activated()) {
       RCLCPP_INFO(
-        get_logger(), "Lifecycle publisher is currently inactive. Messages are not published.");
+          get_logger(), "Lifecycle publisher is currently inactive. Messages are not published.");
     } else {
       RCLCPP_INFO(
-        get_logger(), "Lifecycle publisher is active. Publishing: [%s]", msg->data.c_str());
+          get_logger(), "Lifecycle publisher is active. Publishing: [%s]", msg->data.c_str());
     }
 
-    // We independently from the current state call publish on the lifecycle
-    // publisher.
-    // Only if the publisher is in an active state, the message transfer is
-    // enabled and the message actually published.
+    // 独立于当前状态调用生命周期发布者的 publish 函数。
+    // 只有当发布者处于活动状态时，消息传输才可用，并且消息实际上会被发布。
     pub_->publish(std::move(msg));
   }
 
-  /// Transition callback for state configuring
+  /// 状态配置(configure)的转换回调函数
   /**
-   * on_configure callback is being called when the lifecycle node
-   * enters the "configuring" state.
-   * Depending on the return value of this function, the state machine
-   * either invokes a transition to the "inactive" state or stays
-   * in "unconfigured".
-   * TRANSITION_CALLBACK_SUCCESS transitions to "inactive"
-   * TRANSITION_CALLBACK_FAILURE transitions to "unconfigured"
-   * TRANSITION_CALLBACK_ERROR or any uncaught exceptions to "errorprocessing"
+   * 当生命周期节点进入“配置”状态时，将调用 on_configure 回调函数。
+   * 根据此函数的返回值，状态机将调用到“inactive”状态或保持在“unconfigured”状态。
+   * TRANSITION_CALLBACK_SUCCESS 转换到“inactive”
+   * TRANSITION_CALLBACK_FAILURE 转换到“unconfigured”
+   * TRANSITION_CALLBACK_ERROR 或任何未捕获的异常转换到“errorprocessing”
    */
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-  on_configure(const rclcpp_lifecycle::State &)
-  {
-    // This callback is supposed to be used for initialization and
-    // configuring purposes.
-    // We thus initialize and configure our publishers and timers.
-    // The lifecycle node API does return lifecycle components such as
-    // lifecycle publishers. These entities obey the lifecycle and
-    // can comply to the current state of the node.
-    // As of the beta version, there is only a lifecycle publisher
-    // available.
+  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn  //
+  on_configure(const rclcpp_lifecycle::State &) {
+    // 此回调函数应用于初始化和配置目的。
+    // 因此，初始化和配置的发布者和计时器。
+    // 生命周期节点 API
+    // 返回生命周期组件，例如生命周期发布者。这些实体遵守生命周期并可以符合节点的当前状态。 在 beta
+    // 版本中，只有一个生命周期发布者可用。
     pub_ = this->create_publisher<std_msgs::msg::String>("lifecycle_chatter", 10);
-    timer_ = this->create_wall_timer(
-      1s, std::bind(&LifecycleTalker::publish, this));
+    timer_ = this->create_wall_timer(1s, std::bind(&LifecycleTalker::publish, this));
 
     RCLCPP_INFO(get_logger(), "on_configure() is called.");
 
-    // We return a success and hence invoke the transition to the next
-    // step: "inactive".
-    // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
-    // would stay in the "unconfigured" state.
-    // In case of TRANSITION_CALLBACK_ERROR or any thrown exception within
-    // this callback, the state machine transitions to state "errorprocessing".
+    // 返回成功，因此调用转换到下一个步骤：“inactive”。
+    // 如果返回TRANSITION_CALLBACK_FAILURE，则状态机将保持在“未配置”状态。
+    // 在此回调中出现TRANSITION_CALLBACK_ERROR或任何抛出的异常的情况下，状态机会转换到状态“errorprocessing”。
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
-  /// Transition callback for state activating
+  /// 状态激活(active)的转换回调
   /**
-   * on_activate callback is being called when the lifecycle node
-   * enters the "activating" state.
-   * Depending on the return value of this function, the state machine
-   * either invokes a transition to the "active" state or stays
-   * in "inactive".
-   * TRANSITION_CALLBACK_SUCCESS transitions to "active"
-   * TRANSITION_CALLBACK_FAILURE transitions to "inactive"
-   * TRANSITION_CALLBACK_ERROR or any uncaught exceptions to "errorprocessing"
+   * 当生命周期节点进入“activating”状态时，将调用on_activate回调。
+   * 根据此函数的返回值，状态机将调用到“active”状态或保持在“inactive”状态。
+   * TRANSITION_CALLBACK_SUCCESS 转换到 "active"
+   * TRANSITION_CALLBACK_FAILURE 转换到 "inactive"
+   * TRANSITION_CALLBACK_ERROR 或任何未捕获的异常转换到 "errorprocessing"
    */
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-  on_activate(const rclcpp_lifecycle::State & state)
-  {
-    // The parent class method automatically transition on managed entities
-    // (currently, LifecyclePublisher).
-    // pub_->on_activate() could also be called manually here.
-    // Overriding this method is optional, a lot of times the default is enough.
+  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn  //
+  on_activate(const rclcpp_lifecycle::State &state) {
+    // 父类方法会自动管理实体（当前为LifecyclePublisher）上的转换。
+    // pub_->on_activate()也可以在此手动调用。
+    // 覆盖此方法是可选的，很多时候默认就足够了。
     LifecycleNode::on_activate(state);
+    // impl_->on_activate(); // 默认提供的
+    // pub_->on_activate(); // 也可以在此手动调用
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_activate() is called.");
 
-    // Let's sleep for 2 seconds.
-    // We emulate we are doing important
-    // work in the activating phase.
+    // 让睡眠2秒钟。
+    // 模拟在激活阶段执行重要工作。
     std::this_thread::sleep_for(2s);
 
-    // We return a success and hence invoke the transition to the next
-    // step: "active".
-    // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
-    // would stay in the "inactive" state.
-    // In case of TRANSITION_CALLBACK_ERROR or any thrown exception within
-    // this callback, the state machine transitions to state "errorprocessing".
+    // 返回成功，因此调用转换到下一个步骤：“active”。
+    // 如果返回TRANSITION_CALLBACK_FAILURE，则状态机将保持在“inactive”状态。
+    // 在此回调中出现TRANSITION_CALLBACK_ERROR或任何抛出的异常的情况下，状态机会转换到状态“errorprocessing”。
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
-  /// Transition callback for state deactivating
+  /// 状态去激活(deactivate)的转换回调
   /**
-   * on_deactivate callback is being called when the lifecycle node
-   * enters the "deactivating" state.
-   * Depending on the return value of this function, the state machine
-   * either invokes a transition to the "inactive" state or stays
-   * in "active".
-   * TRANSITION_CALLBACK_SUCCESS transitions to "inactive"
-   * TRANSITION_CALLBACK_FAILURE transitions to "active"
-   * TRANSITION_CALLBACK_ERROR or any uncaught exceptions to "errorprocessing"
+   * 当生命周期节点进入“deactivating”状态时，将调用on_deactivate回调。
+   * 根据此函数的返回值，状态机将调用到“inactive”状态或保持在“active”状态。
+   * TRANSITION_CALLBACK_SUCCESS 转换到 "inactive"
+   * TRANSITION_CALLBACK_FAILURE 转换到 "active"
+   * TRANSITION_CALLBACK_ERROR 或任何未捕获的异常转换到 "errorprocessing"
    */
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-  on_deactivate(const rclcpp_lifecycle::State & state)
-  {
-    // The parent class method automatically transition on managed entities
-    // (currently, LifecyclePublisher).
-    // pub_->on_deactivate() could also be called manually here.
-    // Overriding this method is optional, a lot of times the default is enough.
+  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn  //
+  on_deactivate(const rclcpp_lifecycle::State &state) {
+    // 父类方法会自动管理实体（当前为LifecyclePublisher）上的转换。
+    // pub_->on_deactivate()也可以在此手动调用。
+    // 覆盖此方法是可选的，很多时候默认就足够了。
     LifecycleNode::on_deactivate(state);
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on_deactivate() is called.");
 
-    // We return a success and hence invoke the transition to the next
-    // step: "inactive".
-    // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
-    // would stay in the "active" state.
-    // In case of TRANSITION_CALLBACK_ERROR or any thrown exception within
-    // this callback, the state machine transitions to state "errorprocessing".
+    // 返回成功，因此调用转换到下一个步骤：“inactive”。
+    // 如果返回TRANSITION_CALLBACK_FAILURE，则状态机将保持在“active”状态。
+    // 在此回调中出现TRANSITION_CALLBACK_ERROR或任何抛出的异常的情况下，状态机会转换到状态“errorprocessing”。
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
-  /// Transition callback for state cleaningup
+  /// 状态清理(cleanup)的转换回调
   /**
-   * on_cleanup callback is being called when the lifecycle node
-   * enters the "cleaningup" state.
-   * Depending on the return value of this function, the state machine
-   * either invokes a transition to the "unconfigured" state or stays
-   * in "inactive".
-   * TRANSITION_CALLBACK_SUCCESS transitions to "unconfigured"
-   * TRANSITION_CALLBACK_FAILURE transitions to "inactive"
-   * TRANSITION_CALLBACK_ERROR or any uncaught exceptions to "errorprocessing"
+   * 当生命周期节点进入“cleaningup”状态时，将调用on_cleanup回调。
+   * 根据此函数的返回值，状态机将调用到“unconfigured”状态或保持在“inactive”状态。
+   * TRANSITION_CALLBACK_SUCCESS 转换到 "unconfigured"
+   * TRANSITION_CALLBACK_FAILURE 转换到 "inactive"
+   * TRANSITION_CALLBACK_ERROR 或任何未捕获的异常转换到 "errorprocessing"
    */
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-  on_cleanup(const rclcpp_lifecycle::State &)
-  {
-    // In our cleanup phase, we release the shared pointers to the
-    // timer and publisher. These entities are no longer available
-    // and our node is "clean".
+  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn  //
+  on_cleanup(const rclcpp_lifecycle::State &) {
+    // 在的清理阶段，释放计时器和发布者的共享指针。这些实体不再可用，的节点是“干净”的。
     timer_.reset();
     pub_.reset();
 
     RCUTILS_LOG_INFO_NAMED(get_name(), "on cleanup is called.");
 
-    // We return a success and hence invoke the transition to the next
-    // step: "unconfigured".
-    // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
-    // would stay in the "inactive" state.
-    // In case of TRANSITION_CALLBACK_ERROR or any thrown exception within
-    // this callback, the state machine transitions to state "errorprocessing".
+    // 返回成功，因此调用转换到下一个步骤：“unconfigured”。
+    // 如果返回TRANSITION_CALLBACK_FAILURE，则状态机将保持在“inactive”状态。
+    // 在此回调中出现TRANSITION_CALLBACK_ERROR或任何抛出的异常的情况下，状态机会转换到状态“errorprocessing”。
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
-  /// Transition callback for state shutting down
+  /// 状态转换回调函数，用于关闭状态(shutdown)
   /**
-   * on_shutdown callback is being called when the lifecycle node
-   * enters the "shuttingdown" state.
-   * Depending on the return value of this function, the state machine
-   * either invokes a transition to the "finalized" state or stays
-   * in its current state.
-   * TRANSITION_CALLBACK_SUCCESS transitions to "finalized"
-   * TRANSITION_CALLBACK_FAILURE transitions to current state
-   * TRANSITION_CALLBACK_ERROR or any uncaught exceptions to "errorprocessing"
+   * 当生命周期节点进入“正在关闭”状态时，将调用on_shutdown回调函数。
+   * 根据此函数的返回值，状态机将执行从当前状态到“已完成”状态的转换或保持在当前状态。
+   * TRANSITION_CALLBACK_SUCCESS 转换到“已完成”状态
+   * TRANSITION_CALLBACK_FAILURE 保持当前状态
+   * TRANSITION_CALLBACK_ERROR 或任何未捕获的异常转换到“错误处理”状态
    */
-  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
-  on_shutdown(const rclcpp_lifecycle::State & state)
-  {
-    // In our shutdown phase, we release the shared pointers to the
-    // timer and publisher. These entities are no longer available
-    // and our node is "clean".
+  rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn  //
+  on_shutdown(const rclcpp_lifecycle::State &state) {
+    // 在关闭阶段，释放计时器和发布者的共享指针。这些实体不再可用，的节点是“干净的”。
     timer_.reset();
     pub_.reset();
 
     RCUTILS_LOG_INFO_NAMED(
-      get_name(),
-      "on shutdown is called from state %s.",
-      state.label().c_str());
+        get_name(), "on shutdown is called from state %s.", state.label().c_str());
 
-    // We return a success and hence invoke the transition to the next
-    // step: "finalized".
-    // If we returned TRANSITION_CALLBACK_FAILURE instead, the state machine
-    // would stay in the current state.
-    // In case of TRANSITION_CALLBACK_ERROR or any thrown exception within
-    // this callback, the state machine transitions to state "errorprocessing".
+    // 返回成功并因此调用转换到下一步：“已完成”。
+    // 如果返回TRANSITION_CALLBACK_FAILURE，则状态机将保持在当前状态。
+    // 如果在此回调中返回TRANSITION_CALLBACK_ERROR或引发任何异常，则状态机将转换到状态“错误处理”。
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
 private:
-  // We hold an instance of a lifecycle publisher. This lifecycle publisher
-  // can be activated or deactivated regarding on which state the lifecycle node
-  // is in.
-  // By default, a lifecycle publisher is inactive by creation and has to be
-  // activated to publish messages into the ROS world.
+  // 拥有一个生命周期发布者的实例。这个生命周期发布者可以根据生命周期节点所处的状态被激活或停用。
+  // 默认情况下，生命周期发布者在创建时处于非活动状态，并且必须被激活才能将消息发布到ROS世界中。
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>> pub_;
 
-  // We hold an instance of a timer which periodically triggers the publish function.
-  // As for the beta version, this is a regular timer. In a future version, a
-  // lifecycle timer will be created which obeys the same lifecycle management as the
-  // lifecycle publisher.
+  // 拥有一个计时器的实例，它会定期触发发布函数。
+  // 在beta版本中，这是一个常规计时器。在将来的版本中，将创建一个生命周期计时器，该计时器遵循与生命周期发布者相同的生命周期管理。
   std::shared_ptr<rclcpp::TimerBase> timer_;
 };
 
 /**
- * A lifecycle node has the same node API
- * as a regular node. This means we can spawn a
- * node, give it a name and add it to the executor.
+ * 生命周期节点与普通节点具有相同的节点 API。
+ * 这意味着可以生成一个节点，为其命名并将其添加到执行器中。
  */
-int main(int argc, char * argv[])
-{
-  // force flush of the stdout buffer.
-  // this ensures a correct sync of all prints
-  // even when executed simultaneously within the launch file.
+int main(int argc, char *argv[]) {
+  // 强制刷新 stdout 缓冲区。
+  // 这确保了所有打印的正确同步，即使在启动文件中同时执行也是如此。
   setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 
   rclcpp::init(argc, argv);
-
   rclcpp::executors::SingleThreadedExecutor exe;
-
-  std::shared_ptr<LifecycleTalker> lc_node =
-    std::make_shared<LifecycleTalker>("lc_talker");
-
+  std::shared_ptr<LifecycleTalker> lc_node = std::make_shared<LifecycleTalker>("lc_talker");
   exe.add_node(lc_node->get_node_base_interface());
-
   exe.spin();
 
   rclcpp::shutdown();
-
   return 0;
 }

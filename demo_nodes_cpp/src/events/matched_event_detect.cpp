@@ -132,18 +132,18 @@ private:
 };
 
 /*
-上述代码定义了两个类 MultiSubNode 和
-MultiPubNode，分别用于创建多个订阅节点和发布节点。这两个类都继承自 rclcpp::Node 类。
+  上述代码定义了两个类 MultiSubNode 和
+  MultiPubNode，分别用于创建多个订阅节点和发布节点。这两个类都继承自 rclcpp::Node 类。
 
-在 MultiSubNode 中，构造函数 MultiSubNode(const std::string& topic_name) 接收一个字符串参数
-topic_name，用于初始化订阅的 topic 名称。create_one_sub()
-函数用于创建一个新的订阅节点，并返回一个指向 Subscription 的弱指针。destroy_one_sub()
-函数用于销毁一个订阅节点，接收一个指向 Subscription 的弱指针作为参数。
+  在 MultiSubNode 中，构造函数 MultiSubNode(const std::string& topic_name) 接收一个字符串参数
+  topic_name，用于初始化订阅的 topic 名称。create_one_sub()
+  函数用于创建一个新的订阅节点，并返回一个指向 Subscription 的弱指针。destroy_one_sub()
+  函数用于销毁一个订阅节点，接收一个指向 Subscription 的弱指针作为参数。
 
-在 MultiPubNode 中，构造函数 MultiPubNode(const std::string& topic_name) 接收一个字符串参数
-topic_name，用于初始化发布的 topic 名称。create_one_pub()
-函数用于创建一个新的发布节点，并返回一个指向 Publisher 的弱指针。destroy_one_pub()
-函数用于销毁一个发布节点，接收一个指向 Publisher 的弱指针作为参数。
+  在 MultiPubNode 中，构造函数 MultiPubNode(const std::string& topic_name) 接收一个字符串参数
+  topic_name，用于初始化发布的 topic 名称。create_one_pub()
+  函数用于创建一个新的发布节点，并返回一个指向 Publisher 的弱指针。destroy_one_pub()
+  函数用于销毁一个发布节点，接收一个指向 Publisher 的弱指针作为参数。
 */
 
 /**
